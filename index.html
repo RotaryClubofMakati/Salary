@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DTR & Payroll System</title>
+  <style>
+    *{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033}
+    .top{background:#172033;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center}
+    .top h1{margin:0;font-size:21px}.top small{opacity:.75}
+    .wrap{max-width:1200px;margin:22px auto;padding:0 16px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.tab{border:0;background:#e8edf5;padding:11px 16px;border-radius:9px;cursor:pointer;font-weight:700}.tab.active{background:#172033;color:#fff}
+    .panel{display:none;background:#fff;border-radius:14px;padding:20px;box-shadow:0 3px 18px rgba(0,0,0,.06)}.panel.active{display:block}
+    h2{margin-top:0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:12px;font-weight:700;color:#536075}.field input,.field select,.field textarea{padding:10px;border:1px solid #d8dee9;border-radius:8px;font-size:14px}.field textarea{min-height:70px}
+    .wide{grid-column:1/-1}.actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}.btn{border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer}.primary{background:#172033;color:#fff}.secondary{background:#e8edf5}.danger{background:#ffe5e5;color:#a40000}
+    table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e8ebf0;text-align:left}th{background:#f4f6fa}.right{text-align:right}
+    .msg{margin:12px 0;padding:10px;border-radius:8px;display:none}.ok{background:#e8f7ed;color:#176b36}.err{background:#ffe9e9;color:#9d1515}
+    .subnote{color:#536075;font-size:13px;margin-top:-8px}
+    .monthbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 12px;padding:10px 12px;background:#f4f6fa;border-radius:10px}
+    .dtr-table-wrap{overflow-x:auto;margin-top:16px}
+    .dtr-table{width:100%;min-width:1100px;border-collapse:collapse;font-size:13px}
+    .dtr-table th,.dtr-table td{padding:8px;border:1px solid #e0e5ee;vertical-align:middle}
+    .dtr-table th{background:#f4f6fa;white-space:nowrap}
+    .dtr-table tr.weekend{background:#fafafa}
+    .dtr-table tr.holiday{background:#fffaf0}
+    .dtr-table .datecell{font-weight:700;white-space:nowrap}
+    .dtr-table .daycell{font-weight:700;white-space:nowrap}
+    .dtr-table input,.dtr-table select,.dtr-table textarea{width:100%;padding:7px;border:1px solid #d8dee9;border-radius:6px;font-size:12px}
+    .dtr-table textarea{min-width:150px;min-height:36px;resize:vertical}
+    .dtr-table .calc{font-size:11px;line-height:1.35;white-space:nowrap;color:#536075}
+    .rest-note{color:#68748a;font-size:12px}
+    @media(max-width:800px){.dtr-table{min-width:1050px}}
+
+    .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.card{background:#f4f6fa;padding:15px;border-radius:10px}.card b{font-size:20px;display:block;margin-top:5px}
+    @media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.cards{grid-template-columns:1fr 1fr}} @media(max-width:520px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="top"><div><h1>DTR & Payroll System</h1><small>Monday–Friday • 7:30 AM start • Automatic payroll</small></div><div><div id="clock"></div><small id="connectionStatus" style="opacity:.65">Checking Google Sheet…</small></div></div>
+<div class="wrap">
+  <div id="msg" class="msg"></div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('dashboard',this)">Dashboard</button>
+    <button class="tab" onclick="showTab('employees',this)">Staff List</button>
+    <button class="tab" onclick="showTab('salary',this)">Salary</button>
+    <button class="tab" onclick="showTab('dtr',this)">DTR Entry</button>
+    <button class="tab" onclick="showTab('saved',this)">Saved DTR</button>
+    <button class="tab" onclick="showTab('payroll',this)">Payroll</button>
+  </div>
+
+  <section id="dashboard" class="panel active">
+    <h2>Dashboard</h2>
+    <div class="cards">
+      <div class="card">Staff<b id="staffCount">0</b></div>
+      <div class="card">Active Staff<b id="activeCount">0</b></div>
+      <div class="card">Payroll Rule<b>22 days</b></div>
+      <div class="card">OT Multiplier<b>1.25×</b></div>
+    </div>
+    <p><b>Schedule</b></p>
+    <p>Mon–Thu: 7:30 AM–12:00 NN / 1:00 PM–5:30 PM</p>
+    <p>Friday: 7:30 AM–1:00 PM / 2:00 PM–4:30 PM</p>
+    <p>Saturday & Sunday: Non-working days</p>
+    <p><b>Cutoffs</b></p>
+    <p>1st: 11th–25th → salary date 31st<br>2nd: 26th–10th → salary date 15th</p>
+  </section>
+
+  <section id="employees" class="panel">
+    <h2>Staff List</h2>
+    <div class="grid">
+      <div class="field"><label>Employee ID</label><input id="eId"></div>
+      <div class="field"><label>Employee Name</label><input id="eName"></div>
+      <div class="field"><label>Position</label><input id="ePosition"></div>
+      <div class="field"><label>Status</label><select id="eStatus"><option>Active</option><option>Inactive</option></select></div>
+      <div class="field"><label>Date Hired</label><input type="date" id="eDate"></div>
+      <div class="field wide"><label>Notes</label><textarea id="eNotes"></textarea></div>
+    </div>
+    <div class="actions"><button class="btn primary" onclick="saveEmployee()">Save / Update Staff</button><button class="btn secondary" onclick="clearEmployee()">Clear</button></div>
+    <table><thead><tr><th>ID</th><th>Name</th><th>Position</th><th>Status</th><th>Date Hired</th><th></th></tr></thead><tbody id="employeeRows"></tbody></table>
+  </section>
+
+  <section id="salary" class="panel">
+    <h2>Salary Entry / Edit</h2>
+    <div class="grid">
+      <div class="field"><label>Employee</label><select id="sEmployee"></select></div>
+      <div class="field"><label>Monthly Basic Salary</label><input type="number" id="sMonthly" step=".01" placeholder="18000"></div>
+      <div class="field"><label>Semi-Monthly Basic (optional)</label><input type="number" id="sSemi" step=".01" placeholder="9000"></div>
+      <div class="field"><label>Effective From</label><input type="date" id="sEffective"></div>
+    </div>
+    <div class="actions"><button class="btn primary" onclick="saveSalary()">Save Salary</button></div>
+    <p id="salaryPreview"></p>
+    <table><thead><tr><th>Employee</th><th>Monthly</th><th>Semi-Monthly</th><th>Daily</th><th>Hourly</th><th>Effective</th><th>Active</th></tr></thead><tbody id="salaryRows"></tbody></table>
+  </section>
+
+  <section id="dtr" class="panel">
+    <h2>DTR Entry — Daily Rows</h2>
+    <p class="subnote">Select an employee and month. Each date is one row. Lunch is automatically deducted as 1 hour. Saturday and Sunday are automatic rest days; leave them blank when there is no work. If you enter Time In and Time Out on a Saturday or Sunday, the system records the worked time as OT.</p>
+
+    <div class="grid">
+      <div class="field">
+        <label>Employee</label>
+        <select id="dEmployee" onchange="loadDTRCalendar()"></select>
+      </div>
+      <div class="field">
+        <label>Month</label>
+        <select id="dMonth" onchange="loadDTRCalendar()"></select>
+      </div>
+      <div class="field">
+        <label>Year</label>
+        <select id="dYear" onchange="loadDTRCalendar()"></select>
+      </div>
+    </div>
+
+    <div class="monthbar">
+      <button class="btn secondary" onclick="changeDTRMonth(-1)">‹ Previous</button>
+      <strong id="dMonthTitle"></strong>
+      <button class="btn secondary" onclick="changeDTRMonth(1)">Next ›</button>
+    </div>
+
+    <div class="dtr-table-wrap"><table class="dtr-table"><thead><tr><th>Date</th><th>Day</th><th>Status</th><th>Time In</th><th>Time Out</th><th>Calculation</th><th>Remarks</th></tr></thead><tbody id="dtrCalendar"></tbody></table></div>
+
+    <div class="actions">
+      <button class="btn primary" onclick="saveCurrentDTRMonth()">Save Month</button>
+      <button class="btn secondary" onclick="loadDTRCalendar()">Refresh Month</button>
+    </div>
+    <p id="dtrHint"></p>
+  </section>
+
+  <section id="saved" class="panel">
+    <h2>Saved DTR</h2>
+    <div class="grid">
+      <div class="field"><label>Employee</label><select id="vEmployee"></select></div>
+      <div class="field"><label>Month</label><select id="vMonth" onchange="loadSavedDTR()"></select></div>
+      <div class="field"><label>Year</label><select id="vYear" onchange="loadSavedDTR()"></select></div>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" onclick="changeViewMonth(-1)">‹ Previous</button>
+      <button class="btn primary" onclick="loadSavedDTR()">View DTR</button>
+      <button class="btn secondary" onclick="changeViewMonth(1)">Next ›</button>
+    </div>
+    <p id="viewMonthTitle" class="subnote"></p>
+    <table><thead><tr><th>Date</th><th>Day</th><th>Status</th><th>In</th><th>Out</th><th>Late</th><th>Undertime</th><th>OT</th><th>Hours</th><th>Remarks</th></tr></thead><tbody id="dtrRows"></tbody></table>
+  </section>
+
+  <section id="payroll" class="panel">
+    <h2>Generate Payroll</h2>
+    <p class="subnote">Select an employee and payroll month. The system automatically uses your fixed cutoffs: <b>11th–25th</b> paid on the <b>15th</b>, and <b>26th–10th</b> paid on the <b>last day of the month</b>. No cutoff dates or pay date need to be entered.</p>
+    <div class="grid">
+      <div class="field"><label>Employee</label><select id="pEmployee"></select></div>
+      <div class="field"><label>Payroll Month</label><select id="pMonth"></select></div>
+      <div class="field"><label>Year</label><select id="pYear"></select></div>
+      <div class="field"><label>Payroll Period</label><select id="pCutoff" onchange="updatePayrollDates()">
+        <option value="1">11th–25th</option>
+        <option value="2">26th–10th</option>
+      </select></div>
+      <div class="field"><label>Pay Date</label><input type="text" id="pPayDisplay" readonly></div>
+      <div class="field"><label>Other Deduction</label><input type="number" id="pOther" value="0" step=".01"></div>
+    </div>
+    <div id="payPeriodInfo" class="subnote"></div>
+    <div class="actions"><button class="btn primary" onclick="generatePayroll()">Generate & Save Payroll</button></div>
+    <div id="payResult"></div>
+    <h3>Payroll History</h3>
+    <div class="actions"><button class="btn secondary" onclick="loadPayroll()">Refresh History</button></div>
+    <table><thead><tr><th>Employee</th><th>Cutoff</th><th>Pay Date</th><th>Basic</th><th>Holiday</th><th>OT</th><th>Deduction</th><th>Gross</th></tr></thead><tbody id="payRows"></tbody></table>
+  </section>
+</div>
+
+<script>
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzV6WstX6rr9vKqN254sYUZUkMI8e41tq7qFYAxwKwQr9hz2hZWZSNwEkJSIw3Keh6V/exec';
+let employees=[];
+let dtrMonthRows=[];
+let dtrCalendarCache={};
+
+// Standalone HTML API bridge.
+// This file can be opened locally or hosted on any static site.
+// It talks to the Google Apps Script Web App through JSONP, avoiding browser CORS restrictions.
+function api(action, data, onSuccess, onError){
+  const cb='__dtr_cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  const script=document.createElement('script');
+  const params=new URLSearchParams();
+  params.set('action', action);
+  params.set('callback', cb);
+  if(data && Object.keys(data).length) params.set('data', JSON.stringify(data));
+  const cleanup=()=>{try{delete window[cb]}catch(e){} script.remove()};
+  const timer=setTimeout(()=>{cleanup();(onError||((e)=>msg(e,false)))('Request timed out. Check the Apps Script deployment and URL.')},30000);
+  window[cb]=(response)=>{clearTimeout(timer);cleanup();if(response && response.ok){onSuccess&&onSuccess(response.data)}else{const err=response&&response.error?response.error:'Request failed';(onError||((e)=>msg(e,false)))(err)}};
+  script.onerror=()=>{clearTimeout(timer);cleanup();(onError||((e)=>msg(e,false)))('Could not connect to the Google Sheet backend. Check the Web App URL and deployment access.')};
+  script.src=WEB_APP_URL+'?'+params.toString();
+  document.head.appendChild(script);
+}
+
+function showTab(id,btn){
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active');
+  if(id==='salary')loadSalary();
+  if(id==='payroll')loadPayroll();
+  if(id==='dtr')loadDTRCalendar();
+}
+function msg(t,ok=true){
+  const m=document.getElementById('msg');
+  m.textContent=t;m.className='msg '+(ok?'ok':'err');m.style.display='block';
+  setTimeout(()=>m.style.display='none',4000)
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+function money(n){return '₱'+Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+function populate(){
+  ['sEmployee','dEmployee','vEmployee','pEmployee'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.innerHTML='<option value="">Select employee</option>'+employees.map(e=>`<option value="${esc(e.id)}">${esc(e.name)} (${esc(e.id)})</option>`).join('');
+  });
+  renderEmployees();
+  document.getElementById('staffCount').textContent=employees.length;
+  document.getElementById('activeCount').textContent=employees.filter(e=>e.status==='Active').length;
+  initDTRMonthSelectors();
+}
+
+function initDTRMonthSelectors(){
+  const now=new Date();
+  const monthOptions=Array.from({length:12},(_,i)=>`<option value="${i+1}">${new Date(2000,i,1).toLocaleString('en-US',{month:'long'})}</option>`).join('');
+  const current=now.getFullYear();
+  let years=[];
+  for(let y=current-5;y<=current+5;y++)years.push(`<option value="${y}">${y}</option>`);
+  const yearOptions=years.join('');
+
+  [['dMonth','dYear'],['vMonth','vYear']].forEach(([mId,yId])=>{
+    const month=document.getElementById(mId);
+    const year=document.getElementById(yId);
+    if(!month || !year)return;
+    if(!month.options.length)month.innerHTML=monthOptions;
+    if(!year.options.length)year.innerHTML=yearOptions;
+    month.value=String(now.getMonth()+1);
+    year.value=String(now.getFullYear());
+  });
+}
+
+function loadDTRCalendar(){
+  const employeeId=document.getElementById('dEmployee').value;
+  const month=Number(document.getElementById('dMonth').value);
+  const year=Number(document.getElementById('dYear').value);
+  if(!employeeId){
+    document.getElementById('dMonthTitle').textContent='Select an employee';
+    document.getElementById('dtrCalendar').innerHTML='<div class="subnote">Select an employee to enter DTR for the selected month.</div>';
+    return;
+  }
+  const title=new Date(year,month-1,1).toLocaleString('en-US',{month:'long',year:'numeric'});
+  document.getElementById('dMonthTitle').textContent=title;
+  api('getEmployeeDTRMonth', {employeeId, year, month}, rows=>{
+    dtrMonthRows=rows||[];
+    renderDTRCalendar(year,month);
+  });
+}
+
+function changeDTRMonth(delta){
+  const month=document.getElementById('dMonth');
+  const year=document.getElementById('dYear');
+  let m=Number(month.value)+delta, y=Number(year.value);
+  if(m<1){m=12;y--} if(m>12){m=1;y++}
+  const yopt=[...year.options].find(o=>Number(o.value)===y);
+  if(!yopt){year.insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`)}
+  year.value=String(y);month.value=String(m);loadDTRCalendar();
+}
+
+function rowForDate(key){
+  return dtrMonthRows.find(r=>r.date===key) || null;
+}
+
+function dateKey(y,m,d){
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function renderDTRCalendar(year,month){
+  const cal=document.getElementById('dtrCalendar');
+  const days=new Date(year,month,0).getDate();
+  let out='';
+
+  for(let day=1;day<=days;day++){
+    const key=dateKey(year,month,day);
+    const dt=new Date(year,month-1,day);
+    const dow=dt.getDay();
+    const r=rowForDate(key);
+    const weekend=(dow===0||dow===6);
+    const status=r?.status || (weekend?'Rest Day':'Present');
+    const holiday=(r?.holidayPay && Number(r.holidayPay)>0) ? 'holiday' : '';
+    const rowClass=weekend?'weekend '+holiday:holiday;
+    const dayName=dt.toLocaleString('en-US',{weekday:'long'});
+
+    out+=`
+      <tr class="${rowClass}" data-date="${key}">
+        <td class="datecell">${key}</td>
+        <td class="daycell">${dayName}${weekend?' <span class="rest-note">(Rest Day)</span>':''}</td>
+        <td>
+          <select class="d-status" onchange="updateCalendarCalc('${key}')">
+            ${['Present','Late','Undertime','OT','Rest Day','Absent','Holiday - With Pay','Holiday - x2','Leave'].map(s=>`<option ${status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </td>
+        <td><input class="d-in" type="time" value="${esc(r?.timeIn||'')}" onchange="updateCalendarCalc('${key}')"></td>
+        <td><input class="d-out" type="time" value="${esc(r?.timeOut||'')}" onchange="updateCalendarCalc('${key}')"></td>
+        <td class="calc" id="calc-${key}">Calculating…</td>
+        <td><textarea class="d-remarks">${esc(r?.remarks||'')}</textarea></td>
+      </tr>`;
+  }
+  cal.innerHTML=out;
+
+  // Always calculate the visible values from the current inputs, including
+  // previously saved rows. This keeps the UI and saved payroll calculation in sync.
+  for(let day=1;day<=days;day++) updateCalendarCalc(dateKey(year,month,day));
+}
+
+function timeMinutes(v){
+  if(!v)return null;
+  const p=String(v).split(':').map(Number);
+  if(p.length<2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1]))return null;
+  return p[0]*60+p[1];
+}
+
+function updateCalendarCalc(key){
+  const row=document.querySelector(`tr[data-date="${key}"]`);
+  if(!row)return;
+  const status=row.querySelector('.d-status').value;
+  const inM=timeMinutes(row.querySelector('.d-in').value);
+  const outM=timeMinutes(row.querySelector('.d-out').value);
+  const d=new Date(key+'T12:00:00');
+  const weekend=d.getDay()===0||d.getDay()===6;
+  const expectedOut=d.getDay()===5?16*60+30:17*60+30;
+  const expectedIn=7*60+30;
+  let late=0,ot=0,worked=0;
+  const holidayClass = row.querySelector('.d-status').value==='Holiday - x2' ? ' · Holiday x2' : '';
+
+  if(weekend){
+    if(inM!=null&&outM!=null&&outM>inM){
+      worked=Math.max(0,(outM-inM-60)/60);
+      ot=Math.max(0,Math.round(worked*60));
+    }
+  } else if(!['Absent','Holiday - With Pay','Leave'].includes(status)){
+    if(inM!=null)late=Math.max(0,inM-expectedIn);
+    if(outM!=null)ot=Math.max(0,outM-expectedOut);
+    if(inM!=null&&outM!=null)worked=Math.max(0,(outM-inM-60)/60);
+  } else if(status==='Holiday - With Pay' && inM!=null&&outM!=null){
+    worked=Math.max(0,(outM-inM-60)/60);
+  }
+
+  let label=`Late: ${late} min · OT: ${ot} min · Worked: ${worked.toFixed(2)} hr${holidayClass}`;
+  if(status==='Holiday - With Pay' || (inM!=null&&outM!=null&&d.getDay()!==0&&d.getDay()!==6)){
+    // Holiday status is optional; backend also detects the holiday from the Holidays sheet.
+  }
+  row.querySelector('.calc').textContent=label;
+
+  if(weekend&&inM!=null&&outM!=null&&outM>inM&&status==='Rest Day'){
+    row.querySelector('.d-status').value='OT';
+  }
+}
+
+
+function collectCalendarRows(){
+  const employeeId=document.getElementById('dEmployee').value;
+  return [...document.querySelectorAll('#dtrCalendar tr[data-date]')]
+    .map(row=>({
+      employeeId,
+      date:row.dataset.date,
+      status:row.querySelector('.d-status').value,
+      timeIn:row.querySelector('.d-in').value,
+      lunchOut:'',
+      lunchIn:'',
+      timeOut:row.querySelector('.d-out').value,
+      remarks:row.querySelector('.d-remarks').value,
+      dtrId:rowForDate(row.dataset.date)?.dtrId || ''
+    }))
+    // Do not create records for untouched weekend/rest-day rows.
+    .filter(r=>!(r.status==='Rest Day'&&!r.timeIn&&!r.timeOut&&!r.remarks&&!r.dtrId));
+}
+
+let dtrSaveInProgress=false;
+
+function saveCurrentDTRMonth(){
+  if(dtrSaveInProgress){msg('DTR is already being saved. Please wait.',false);return;}
+  const employeeId=document.getElementById('dEmployee').value;
+  if(!employeeId){msg('Please select an employee first.',false);return;}
+  const rows=collectCalendarRows();
+  if(!rows.length){msg('There is no DTR data to save for this month.',false);return;}
+  const month=Number(document.getElementById('dMonth').value);
+  const year=Number(document.getElementById('dYear').value);
+  const btn=document.querySelector('button[onclick="saveCurrentDTRMonth()"]');
+  dtrSaveInProgress=true;
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+
+  api('saveDTRMonth', {employeeId,year,month,rows}, result=>{
+    dtrSaveInProgress=false;
+    if(btn){btn.disabled=false;btn.textContent='Save Month';}
+    msg(`DTR saved: ${result.saved} day(s). Old duplicate entries were replaced.`);
+    loadDTRCalendar();
+  }, error=>{
+    dtrSaveInProgress=false;
+    if(btn){btn.disabled=false;btn.textContent='Save Month';}
+    msg(error || 'Could not save DTR.',false);
+  });
+}
+
+function setConnectionStatus(text, ok){
+  const el=document.getElementById('connectionStatus');
+  if(!el)return;
+  el.textContent=text;
+  el.style.opacity='1';
+  el.style.color=ok?'#b7f7c7':'#ffd0d0';
+}
+
+function load(){
+  setConnectionStatus('Connecting to Google Sheet…', true);
+  api('getBootstrap', {}, x=>{
+    employees=x.employees||[];
+    populate();
+    setConnectionStatus('Google Sheet connected', true);
+  }, e=>{
+    setConnectionStatus('Google Sheet not connected', false);
+    msg(e || 'Could not connect to the Google Sheet backend.', false);
+  });
+}
+function saveEmployee(){
+ const d={employeeId:eId.value,employeeName:eName.value,position:ePosition.value,status:eStatus.value,dateHired:eDate.value,notes:eNotes.value};
+ api('upsertEmployee', d, ()=>{msg('Staff saved.');clearEmployee();load()});
+}
+function clearEmployee(){eId.value=eName.value=ePosition.value=eDate.value=eNotes.value='';eStatus.value='Active'}
+function editEmployee(i){const e=employees[i];eId.value=e.id;eName.value=e.name;ePosition.value=e.position;eStatus.value=e.status;eDate.value=e.dateHired;eNotes.value=e.notes;showTab('employees',document.querySelectorAll('.tab')[1])}
+function renderEmployees(){employeeRows.innerHTML=employees.map((e,i)=>`<tr><td>${esc(e.id)}</td><td>${esc(e.name)}</td><td>${esc(e.position)}</td><td>${esc(e.status)}</td><td>${esc(e.dateHired)}</td><td><button class="btn secondary" onclick="editEmployee(${i})">Edit</button></td></tr>`).join('')}
+function saveSalary(){
+ const d={employeeId:sEmployee.value,monthlyBasic:sMonthly.value,semiMonthlyBasic:sSemi.value,effectiveFrom:sEffective.value};
+ api('saveSalary', d, r=>{msg('Salary saved. Daily: '+money(r.daily)+' | Hourly: '+money(r.hourly));loadSalary()});
+}
+function loadSalary(){
+ if(!sEmployee.value){salaryRows.innerHTML='';return}
+ api('getSalaryHistory', {employeeId:sEmployee.value}, rows=>{salaryRows.innerHTML=rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${money(r.monthly)}</td><td>${money(r.semi)}</td><td>${money(r.daily)}</td><td>${money(r.hourly)}</td><td>${r.effective}</td><td>${r.active?'Yes':'No'}</td></tr>`).join('')});
+}
+sEmployee.addEventListener('change',loadSalary);
+function loadSavedDTR(){
+  if(!vEmployee.value && dEmployee.value)vEmployee.value=dEmployee.value;
+  const employeeId=vEmployee.value;
+  const month=Number(vMonth.value);
+  const year=Number(vYear.value);
+  if(!employeeId){
+    dtrRows.innerHTML='';
+    viewMonthTitle.textContent='Select an employee, then choose a month.';
+    return;
+  }
+  viewMonthTitle.textContent=new Date(year,month-1,1).toLocaleString('en-US',{month:'long',year:'numeric'});
+  api('getEmployeeDTRMonth', {employeeId,year,month}, rows=>{
+    dtrRows.innerHTML=rows.length ? rows.map(r=>`<tr><td>${r.date}</td><td>${esc(r.day)}</td><td>${esc(r.status)}</td><td>${esc(r.timeIn)}</td><td>${esc(r.timeOut)}</td><td>${r.late}</td><td>${r.under}</td><td>${r.ot}</td><td>${Number(r.worked).toFixed(2)}</td><td>${esc(r.remarks)}</td></tr>`).join('') : '<tr><td colspan="10">No saved DTR for this month.</td></tr>';
+  });
+}
+function changeViewMonth(delta){
+  let m=Number(vMonth.value)+delta, y=Number(vYear.value);
+  if(m<1){m=12;y--} if(m>12){m=1;y++}
+  if(![...vYear.options].some(o=>Number(o.value)===y))vYear.insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`);
+  vMonth.value=String(m);vYear.value=String(y);loadSavedDTR();
+}
+vEmployee.addEventListener('change',loadSavedDTR);
+function daysInMonth_(year, month){ return new Date(year, month, 0).getDate(); }
+function updatePayrollDates(){
+ const y=Number(pYear.value), m=Number(pMonth.value), c=pCutoff.value;
+ if(!y || !m)return;
+ let start,end,pay;
+ if(c==='1'){
+   start=new Date(y,m-1,11); end=new Date(y,m-1,25); pay=new Date(y,m-1,daysInMonth_(y,m));
+ }else{
+   start=new Date(y,m-2,26); end=new Date(y,m-1,10); pay=new Date(y,m-1,15);
+ }
+ pPayDisplay.value=pay.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+ payPeriodInfo.textContent=(c==='1'?'11th–25th → paid last day of month. ':'26th–10th → paid 15th. ')+'Period: '+start.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' – '+end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' • Pay date: '+pPayDisplay.value;
+}
+function generatePayroll(){
+ const y=Number(pYear.value), m=Number(pMonth.value);
+ const d={employeeId:pEmployee.value,year:y,month:m,cutoff:pCutoff.value,otherDeduction:pOther.value};
+ if(!d.employeeId || !y || !m){msg('Select employee, month, and year first.',false);return;}
+ api('generatePayroll', d, r=>{payResult.innerHTML=`<div class="cards"><div class="card">Employee<b>${esc(r.employeeName)}</b></div><div class="card">Salary<b>${money(r.semiBasic)}</b></div><div class="card">OT Pay<b>${money(r.otPay)}</b></div><div class="card">Gross Pay<b>${money(r.gross)}</b></div></div><p>Pay date: ${r.payDate} • Period: ${r.cutoffStart} to ${r.cutoffEnd} • Absent: ${r.absentDays} day(s) • Late: ${r.lateMinutes} min • OT: ${Number(r.otHours).toFixed(2)} hr</p>`;msg('Payroll generated and saved.');loadPayroll()});
+}
+function loadPayroll(){
+ api('getPayrollHistory', {employeeId:pEmployee.value}, rows=>{payRows.innerHTML=rows.map(r=>`<tr><td>${esc(r.employeeName)}</td><td>${r.start} to ${r.end}</td><td>${r.payDate}</td><td>${money(r.regular)}</td><td>${money(r.holiday)}</td><td>${money(r.ot)}</td><td>${money(r.deduction)}</td><td><b>${money(r.gross)}</b></td></tr>`).join('')});
+}
+(function initPayrollSelectors(){
+ const now=new Date(), y=now.getFullYear();
+ pMonth.innerHTML=Array.from({length:12},(_,i)=>`<option value="${i+1}">${new Date(2000,i,1).toLocaleString('en-US',{month:'long'})}</option>`).join('');
+ pYear.innerHTML=Array.from({length:5},(_,i)=>`<option value="${y-2+i}">${y-2+i}</option>`).join('');
+ pMonth.value=String(now.getMonth()+1); pYear.value=String(y); pCutoff.value='1'; updatePayrollDates();
+ pMonth.addEventListener('change',updatePayrollDates); pYear.addEventListener('change',updatePayrollDates);
+})();
+setInterval(()=>clock.textContent=new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}),1000);
+load();
+</script>
+</body>
+</html>
